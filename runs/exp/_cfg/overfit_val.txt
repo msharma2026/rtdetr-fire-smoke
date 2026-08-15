@@ -1,0 +1,16 @@
+/home/ubuntu/repos/fire_detection/data/fasdd/images/bothFireAndSmoke_CV012775.jpg
+/home/ubuntu/repos/fire_detection/data/fasdd/images/bothFireAndSmoke_CV013759.jpg
+/home/ubuntu/repos/fire_detection/data/fasdd/images/bothFireAndSmoke_CV000761.jpg
+/home/ubuntu/repos/fire_detection/data/fasdd/images/bothFireAndSmoke_CV018091.jpg
+/home/ubuntu/repos/fire_detection/data/fasdd/images/bothFireAndSmoke_CV018453.jpg
+/home/ubuntu/repos/fire_detection/data/fasdd/images/bothFireAndSmoke_CV019145.jpg
+/home/ubuntu/repos/fire_detection/data/fasdd/images/bothFireAndSmoke_CV015934.jpg
+/home/ubuntu/repos/fire_detection/data/fasdd/images/bothFireAndSmoke_CV018823.jpg
+/home/ubuntu/repos/fire_detection/data/fasdd/images/bothFireAndSmoke_CV019381.jpg
+/home/ubuntu/repos/fire_detection/data/fasdd/images/bothFireAndSmoke_CV012926.jpg
+/home/ubuntu/repos/fire_detection/data/fasdd/images/bothFireAndSmoke_CV005444.jpg
+/home/ubuntu/repos/fire_detection/data/fasdd/images/bothFireAndSmoke_CV012038.jpg
+/home/ubuntu/repos/fire_detection/data/fasdd/images/bothFireAndSmoke_CV014177.jpg
+/home/ubuntu/repos/fire_detection/data/fasdd/images/bothFireAndSmoke_CV017262.jpg
+/home/ubuntu/repos/fire_detection/data/fasdd/images/bothFireAndSmoke_CV010509.jpg
+/home/ubuntu/repos/fire_detection/data/fasdd/images/bothFireAndSmoke_CV003427.jpg

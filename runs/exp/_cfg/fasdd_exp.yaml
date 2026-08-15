@@ -1,0 +1,7 @@
+path: /home/ubuntu/repos/fire_detection/runs/exp/_cfg
+train: /home/ubuntu/repos/fire_detection/runs/exp/_cfg/fasdd_train.txt
+val: /home/ubuntu/repos/fire_detection/runs/exp/_cfg/fasdd_val.txt
+
+names:
+  0: fire
+  1: smoke

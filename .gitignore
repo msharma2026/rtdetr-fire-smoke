@@ -1,0 +1,65 @@
+# ---------------------------------------------------------------- datasets --
+# Raw downloads (~16 GB). Fetch from the sources listed in the README.
+datasets/
+
+# Staged copies built by scripts/prepare_data.py -- symlinks into datasets/
+# plus remapped labels. Fully regenerable, and the symlinks would be broken
+# for anyone else anyway.
+data/
+
+# ------------------------------------------------------------------ weights --
+# Pretrained checkpoints auto-downloaded by Ultralytics on first run.
+*.pt
+*.pth
+*.onnx
+*.engine
+*.torchscript
+
+# ------------------------------------------------------------- training runs --
+# Ultralytics run directories. The *.pt rule above already excludes the
+# weights (~2.8 GB); these keep the rest of the noise out while preserving
+# the probe metrics that back DESIGN_DECISIONS.md and the notebook.
+runs/**/weights/
+runs/**/*.jpg
+runs/**/*.png
+runs/**/events.out.tfevents.*
+!runs/exp/**/results.csv
+!runs/exp/*.json
+!runs/exp/*.jsonl
+!runs/exp/_cfg/*.yaml
+
+# --------------------------------------------------------------- environment --
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# ------------------------------------------------------------------ notebooks --
+# The committed notebook keeps its outputs so charts render on GitHub.
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/
+
+# ------------------------------------------------------- AI / editor tooling --
+.claude/
+CLAUDE.md
+.cursor/
+.cursorrules
+.aider*
+.github/copilot-instructions.md
+.continue/
+.windsurfrules
+.vscode/
+.idea/
+*.swp
+
+# ------------------------------------------------------------------------ os --
+.DS_Store
+Thumbs.db
+
+# ---------------------------------------------------------------- misc local --
+*.log
+/tmp/
+wandb/
