@@ -45,87 +45,6 @@ def patch_hgblock_for_compile() -> bool:
     return True
 
 
-def enable_activation_checkpointing(model, layers="all"):
-    """Wrap per-layer forwards in torch.utils.checkpoint to trade compute for VRAM.
-
-    Ultralytics has no gradient checkpointing for any model (verified against
-    upstream main -- the only torch.utils.checkpoint usage is inside the
-    vendored SAM encoder), so this patches the layer loop in
-    BaseModel._predict_once.
-
-    Why here and not on the transformer blocks: RT-DETR-L is a *hybrid*. AIFI
-    is a single 789K-param encoder layer operating on a 20x20 grid, while
-    model.0-model.9 (HGNetv2) process 640->320->160->80 feature maps. Almost
-    all activation memory is in the CNN stages, so checkpointing only the
-    transformer -- the standard advice for ViTs -- would free nearly nothing
-    here.
-
-    Args:
-        model: an Ultralytics BaseModel (e.g. RTDETR(...).model)
-        layers: "all"      -> every layer holding parameters
-                "backbone" -> model.0-model.9 only (the memory-heavy CNN)
-                iterable   -> explicit layer indices
-
-    Gotchas handled:
-      * use_reentrant=False (the reentrant version misbehaves with autograd
-        hooks and unused parameters, and requires grad-carrying inputs).
-      * Training only -- checkpointing during eval/val is pure overhead with
-        no backward pass to save memory for.
-      * Skips parameterless layers (Concat, Upsample): checkpoint saves a
-        layer's *internal* activations, so a layer with no internals saves
-        nothing while still paying recompute.
-      * Layers taking a LIST of inputs (Concat-style `m.f` lists) must be
-        unpacked -- checkpoint takes varargs tensors, not a list.
-    """
-    import torch.utils.checkpoint as cp
-    from torch.nn import functional as nn_fn
-    from ultralytics.nn.tasks import BaseModel
-
-    n_layers = len(model.model)
-    if layers == "all":
-        idx = {i for i, m in enumerate(model.model) if any(True for _ in m.parameters())}
-    elif layers == "backbone":
-        idx = {i for i in range(min(10, n_layers))
-               if any(True for _ in model.model[i].parameters())}
-    else:
-        idx = set(layers)
-    model._ckpt_layers = idx
-
-    if getattr(BaseModel, "_ckpt_patched", False):
-        return idx
-
-    def _predict_once(self, x, profile=False, embed=None):
-        """_predict_once with optional per-layer activation checkpointing."""
-        y, dt, embeddings = [], [], []
-        embed = frozenset(embed) if embed else {-1}
-        max_idx = max(embed)
-        ckpt = getattr(self, "_ckpt_layers", None) or set()
-        for m in self.model:
-            if m.f != -1:  # if not from previous layer
-                x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]
-            if profile:
-                self._profile_one_layer(m, x, dt)
-            if self.training and m.i in ckpt:
-                if isinstance(x, list):
-                    # unpack: checkpoint takes *tensors, and rebuilding the
-                    # list inside keeps the layer's own signature intact
-                    x = cp.checkpoint(lambda *a, _m=m: _m(list(a)), *x, use_reentrant=False)
-                else:
-                    x = cp.checkpoint(m, x, use_reentrant=False)
-            else:
-                x = m(x)  # run
-            y.append(x if m.i in self.save else None)  # save output
-            if m.i in embed:
-                embeddings.append(nn_fn.adaptive_avg_pool2d(x, (1, 1)).squeeze(-1).squeeze(-1))
-                if m.i == max_idx:
-                    return torch.unbind(torch.cat(embeddings, 1), dim=0)
-        return x
-
-    BaseModel._predict_once = _predict_once
-    BaseModel._ckpt_patched = True
-    return idx
-
-
 def patch_rtdetr_loss_syncs() -> bool:
     """Replace the per-image .item() loop in RTDETRDetectionModel.loss.
 
@@ -229,21 +148,55 @@ def use_bf16(trainer) -> bool:
 
 
 def use_fused_adamw(trainer) -> bool:
-    """Rebuild the trainer's AdamW with fused=True (single multi-tensor CUDA
-    kernel per step instead of per-parameter kernel launches).
+    """Rebuild the trainer's AdamW with fused=True (one multi-tensor CUDA
+    kernel per step instead of ~575 per-parameter launches).
 
-    With 575 parameter tensors, the stock optimizer step contributes a large
-    share of the 7,443 launches/iter. Call after trainer._setup_train().
-    Returns True if swapped.
+    Two things the rebuild must preserve, both learned by breaking them:
+
+    1. `initial_lr` and `param_group`. `_setup_scheduler()` (trainer.py:308)
+       stamps `initial_lr` onto every param group and runs BEFORE the
+       on_pretrain_routine_end callback (line 415), so a naive rebuild drops
+       it and the warmup loop dies with `KeyError: 'initial_lr'`
+       (trainer.py:478). `param_group` marks the bias group, which warmup uses
+       to ramp bias LR from warmup_bias_lr instead of 0.
+    2. Per-group `fused`/`foreach` keys must NOT be copied: they override the
+       constructor's fused=True, silently yielding a non-fused optimizer that
+       then trips GradScaler's `assert grad_scale is None and found_inf is
+       None`.
+
+    The LR scheduler also holds a reference to the old optimizer, so it is
+    rebuilt against the new one.
+
+    Call from an `on_pretrain_routine_end` callback. Returns True if swapped.
     """
     import torch as _t
 
     opt = trainer.optimizer
     if not isinstance(opt, _t.optim.AdamW):
         return False
-    trainer.optimizer = _t.optim.AdamW(opt.param_groups, fused=True)
-    return True
 
+    # copy hyperparameters and trainer bookkeeping, but not fused/foreach
+    keep = ("lr", "initial_lr", "weight_decay", "betas", "eps", "param_group",
+            "momentum", "maximize", "amsgrad")
+    groups = []
+    for g in opt.param_groups:
+        ng = {"params": g["params"]}
+        ng.update({k: g[k] for k in keep if k in g})
+        ng.setdefault("initial_lr", g["lr"])   # belt and braces
+        groups.append(ng)
+
+    trainer.optimizer = _t.optim.AdamW(groups, fused=True)
+
+    # the old scheduler still points at the discarded optimizer
+    if getattr(trainer, "scheduler", None) is not None and hasattr(trainer, "lf"):
+        trainer.scheduler = _t.optim.lr_scheduler.LambdaLR(
+            trainer.optimizer, lr_lambda=trainer.lf)
+
+    # fail loudly here rather than 200 iterations into warmup
+    missing = [i for i, g in enumerate(trainer.optimizer.param_groups)
+               if "initial_lr" not in g]
+    assert not missing, f"param groups missing initial_lr: {missing}"
+    return True
 
 def auto_segments(model):
     """Find maximal runs of layers that can be checkpointed as one unit.
@@ -359,3 +312,180 @@ def enable_segment_checkpointing(model, segments="auto"):
     RTDETRDetectionModel.predict = predict
     RTDETRDetectionModel._seg_ckpt_patched = True
     return segs
+
+
+def patch_mha_fast_path() -> bool:
+    """Default nn.MultiheadAttention.forward to need_weights=False.
+
+    Every MHA call site in RT-DETR (AIFI at transformer.py:115/142, the
+    decoder self-attention at :698) discards the attention weights with [0],
+    yet need_weights defaults to True -- which disables the fused SDPA fast
+    path and forces the unfused math kernel that materialises the full
+    attention matrix. setdefault preserves any caller that explicitly asks
+    for weights; Ultralytics never does.
+    """
+    import torch.nn as nn
+
+    if getattr(nn.MultiheadAttention, "_fastpath_patched", False):
+        return False
+    orig = nn.MultiheadAttention.forward
+
+    def forward(self, *args, **kwargs):
+        kwargs.setdefault("need_weights", False)
+        return orig(self, *args, **kwargs)
+
+    nn.MultiheadAttention.forward = forward
+    nn.MultiheadAttention._fastpath_patched = True
+    return True
+
+
+# Compiled backbone+neck functions, keyed by live model object. A WeakKey
+# dict (rather than a model attribute) so that Ultralytics' checkpoint
+# deepcopy and the EMA model never see -- and never try to pickle -- the
+# compiled callable; models absent from this dict fall back to the original
+# eager predict.
+import weakref
+
+_COMPILED_BN = weakref.WeakKeyDictionary()
+
+
+def compile_forward_only(trainer, mode="reduce-overhead") -> bool:
+    """Compile ONLY the backbone+neck (model.0..27); head and loss stay eager.
+
+    Ultralytics' own attempt_compile wraps the whole DetectionModel, and in
+    training model(batch) routes through .loss(), whose .item() calls on
+    data-dependent GT counts graph-break the region -- which is why
+    compile='reduce-overhead' logged 37x 'skipping cudagraphs due to cpu
+    device' and ran 13x slower. The backbone+neck, by contrast, is a pure
+    static-shape GPU chain (640x640 in, three feature maps out; Ultralytics
+    already sets drop_last=True when compiling), i.e. exactly what CUDA
+    graphs want.
+
+    The decoder head runs eagerly because its denoising-group generation
+    (.cpu()/.item()) cannot be captured; same for the loss and matcher.
+
+    Use INSTEAD of Ultralytics' compile arg (pass compile=False), from an
+    on_pretrain_routine_end callback. EMA is constructed before that callback
+    fires, so the EMA copy predates and never carries the compiled function.
+    """
+    import torch
+    from ultralytics.nn.tasks import RTDETRDetectionModel
+
+    model = trainer.model
+    layers = list(model.model[:-1])
+    head = model.model[-1]
+    save = set(model.save)
+    hf = list(head.f)
+
+    def run_backbone_neck(x):
+        y = []
+        for m in layers:
+            if m.f != -1:
+                x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]
+            x = m(x)
+            y.append(x if m.i in save else None)
+        return tuple(y[j] for j in hf)
+
+    _COMPILED_BN[model] = (torch.compile(run_backbone_neck, mode=mode, dynamic=False), head)
+
+    if getattr(RTDETRDetectionModel, "_fwd_split_patched", False):
+        return True
+    orig_predict = RTDETRDetectionModel.predict
+
+    def predict(self, x, profile=False, batch=None, augment=False, embed=None):
+        entry = _COMPILED_BN.get(self)
+        if entry is None or profile or embed:
+            return orig_predict(self, x, profile=profile, batch=batch,
+                                augment=augment, embed=embed)
+        fn, hd = entry
+        return hd(list(fn(x)), batch)
+
+    RTDETRDetectionModel.predict = predict
+    RTDETRDetectionModel._fwd_split_patched = True
+    return True
+
+
+def use_backbone_lr_multiplier(trainer, mult: float = 0.1, n_backbone: int = 10) -> int:
+    """Give the backbone (model.0..model.{n-1}) a lower LR than the rest.
+
+    RT-DETR's paper (Table A) uses base LR 1e-4 with **backbone LR 1e-5** --
+    a 10x reduction, standard DETR/DINO practice: the ImageNet-pretrained
+    backbone is nudged while the randomly-initialised decoder learns fast.
+    Ultralytics applies a single LR to every parameter, so the pretrained
+    backbone is trained as hard as the decoder.
+
+    This may also explain why our LR sweep favoured 3e-4: with one LR you are
+    forced into a compromise between 'too slow for the decoder' and 'too fast
+    for the backbone'.
+
+    Rebuilds param groups, preserving each group's weight_decay (Ultralytics
+    splits into decay/no-decay/bias groups). Returns the number of backbone
+    parameters moved to the reduced LR. Call from on_pretrain_routine_end.
+    """
+    import torch as _t
+
+    opt = trainer.optimizer
+    core = trainer.model
+    core = getattr(core, "_orig_mod", core)   # unwrap torch.compile
+    names = {id(p): n for n, p in core.named_parameters()}
+    prefixes = tuple(f"model.{i}." for i in range(n_backbone))
+
+    def is_backbone(p):
+        n = names.get(id(p), "")
+        n = n.replace("_orig_mod.", "")
+        return n.startswith(prefixes)
+
+    groups, moved = [], 0
+    keep = ("weight_decay", "betas", "eps")
+    for g in opt.param_groups:
+        base_lr = g["lr"]
+        hp = {k: g[k] for k in keep if k in g}
+        bb = [p for p in g["params"] if is_backbone(p)]
+        rest = [p for p in g["params"] if not is_backbone(p)]
+        moved += len(bb)
+        if bb:
+            groups.append({"params": bb, "lr": base_lr * mult,
+                           "initial_lr": base_lr * mult, **hp})
+        if rest:
+            groups.append({"params": rest, "lr": base_lr,
+                           "initial_lr": base_lr, **hp})
+
+    fused = dict(fused=True) if _t.cuda.is_available() else {}
+    trainer.optimizer = _t.optim.AdamW(groups, **fused)
+    # the LR scheduler multiplies each group's lr by a lambda; rebuild it so
+    # it tracks the new group list rather than the discarded optimizer
+    if getattr(trainer, "scheduler", None) is not None and hasattr(trainer, "lf"):
+        trainer.scheduler = _t.optim.lr_scheduler.LambdaLR(
+            trainer.optimizer, lr_lambda=trainer.lf)
+    return moved
+
+
+def set_grad_clip(max_norm: float = 0.1) -> bool:
+    """Set the gradient-clipping threshold used in BaseTrainer.optimizer_step.
+
+    Ultralytics hardcodes max_norm=10.0 (engine/trainer.py:843) -- a
+    YOLO-inherited default so loose it essentially never engages. RT-DETR's
+    paper specifies **clip gradient norm 0.1**, 100x tighter; DETR-family
+    training is known to need tight clipping for stability.
+    """
+    import torch as _t
+    from ultralytics.engine.trainer import BaseTrainer
+
+    BaseTrainer._clip_max_norm = max_norm
+    if getattr(BaseTrainer, "_clip_patched", False):
+        return True
+
+    def optimizer_step(self):
+        """optimizer_step with a configurable clip threshold."""
+        self.scaler.unscale_(self.optimizer)
+        _t.nn.utils.clip_grad_norm_(self.model.parameters(),
+                                    max_norm=getattr(self, "_clip_max_norm", 10.0))
+        self.scaler.step(self.optimizer)
+        self.scaler.update()
+        self.optimizer.zero_grad()
+        if self.ema:
+            self.ema.update(self.model)
+
+    BaseTrainer.optimizer_step = optimizer_step
+    BaseTrainer._clip_patched = True
+    return True

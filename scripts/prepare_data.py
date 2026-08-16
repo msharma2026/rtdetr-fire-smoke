@@ -102,10 +102,31 @@ def stage_dfire() -> None:
     out = DATA / "dfire"
     out.mkdir(parents=True, exist_ok=True)
 
+    # PER-IMAGE symlinks, not a symlinked directory. Ultralytics resolves an
+    # image path to its real location and only then swaps "/images/" for
+    # "/labels/". With `data/dfire/test/images` symlinked to the raw dataset,
+    # that resolution escaped data/ entirely and read
+    # `datasets/D-Fire/test/labels` -- the ORIGINAL labels, where 0=smoke --
+    # while the model predicts 0=fire. Every match came out class-inverted and
+    # D-Fire test mAP50 collapsed to 0.013.
+    #
+    # FASDD is unaffected (its labels are unmodified upstream files, so
+    # resolving through the symlink lands on the same data either way); only
+    # D-Fire rewrites labels, so only D-Fire can mismatch.
     for split in ("train", "test"):
-        link(DFIRE_SRC / split / "images", out / split / "images")
+        img_dir = out / split / "images"
+        if img_dir.is_symlink():          # remove the old directory-level link
+            img_dir.unlink()
+        img_dir.mkdir(parents=True, exist_ok=True)
+        src_imgs = sorted(p for p in (DFIRE_SRC / split / "images").iterdir()
+                          if p.suffix.lower() in {".jpg", ".jpeg", ".png"})
+        for sp in src_imgs:
+            dst = img_dir / sp.name
+            if dst.is_symlink() or dst.exists():
+                dst.unlink()
+            dst.symlink_to(sp)            # file-level link: parent stays in data/
         n = remap_labels(DFIRE_SRC / split / "labels", out / split / "labels")
-        print(f"  dfire {split:5} {n:6} labels remapped (0<->1)")
+        print(f"  dfire {split:5} {len(src_imgs):6} image links, {n:6} labels remapped (0<->1)")
 
     # D-Fire ships no val split -- carve one deterministically out of train
     imgs = sorted(p.name for p in (DFIRE_SRC / "train/images").iterdir())

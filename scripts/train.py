@@ -75,12 +75,40 @@ torch.backends.cudnn.benchmark = True
 # Scalar CPU codegen sidesteps it; GPU kernels come from Triton regardless.
 _inductor_config.cpp.simdlen = 0
 
+# TF32 matmuls on tensor cores for the FP32 ops AMP leaves alone. Measured as
+# part of a +6.1% stack (58.06 vs 54.7 img/s) with the three patches below.
+torch.set_float32_matmul_precision("high")
+
 from ultralytics import RTDETR  # noqa: E402  (after inductor config)
-from patches import patch_hgblock_for_compile  # noqa: E402
+from patches import (  # noqa: E402
+    patch_hgblock_for_compile,
+    patch_mha_fast_path,
+    patch_rtdetr_loss_syncs,
+    use_backbone_lr_multiplier,
+    use_fused_adamw,
+)
+
+# Every MHA call site discards attention weights yet need_weights defaults to
+# True, blocking the fused SDPA path. And RT-DETR's loss does one .item() GPU
+# sync per image for gt_groups; bincount does it in one.
+patch_mha_fast_path()
+patch_rtdetr_loss_syncs()
 
 ROOT = Path.home() / "repos/fire_detection"
 DATA = ROOT / "data"
 RUNS = ROOT / "runs"
+
+# Graceful pause. `touch PAUSE` in the repo root and training exits cleanly at
+# the next epoch boundary, then `--resume` picks up exactly where it stopped.
+#
+# Why not SIGSTOP: it freezes the process but the CUDA context keeps its ~12 GB
+# of VRAM reserved, so the GPU is still unusable for anything else. Freeing the
+# card requires the process to actually exit.
+#
+# The callback runs on on_fit_epoch_end, which fires AFTER save_model()
+# (trainer.py:610) and BEFORE the `if self.stop: break` check (:633), so the
+# checkpoint on disk is always complete.
+PAUSE_FILE = ROOT / "PAUSE"
 
 # lr0=3e-4 (stage 1), 3e-5 (stage 2) -- empirically probed, not the DETR-
 # convention 1e-4 this started as. A 5-point sweep (3e-5/1e-4/3e-4/1e-3/3e-3)
@@ -100,12 +128,16 @@ RUNS = ROOT / "runs"
 # against catastrophic forgetting that a low LR only softens.
 STAGES = {
     1: {
-        "data": "fasdd.yaml", "epochs": 30, "lr0": 3e-4,
+        "data": "fasdd.yaml", "epochs": 80, "lr0": 3e-4,
         "imgsz": 640, "batch": 16, "freeze": None, "name": "stage1_fasdd",
+        "bblr": 0.3,
     },
     2: {
         "data": "dfire.yaml", "epochs": 30, "lr0": 3e-5,
         "imgsz": 640, "batch": 16, "freeze": 10, "name": "stage2_dfire",
+        # stage 2 already freezes the backbone outright, so a backbone LR
+        # multiplier would be a no-op on top of requires_grad=False.
+        "bblr": None,
     },
 }
 
@@ -134,9 +166,13 @@ def main() -> None:
     p.add_argument("--freeze", type=int, default=None, help="freeze model.0..model.N-1; 0 disables")
     p.add_argument("--workers", type=int, default=8)
     p.add_argument("--lr0", type=float, default=None)
+    p.add_argument("--bblr", type=float, default=None,
+                   help="backbone LR multiplier; 0 disables. Probed optimum 0.3")
     p.add_argument("--device", default="0")
     p.add_argument("--fraction", type=float, default=1.0, help="<1 to calibrate on a slice")
     p.add_argument("--patience", type=int, default=15, help="early-stop; cheap insurance on long runs")
+    p.add_argument("--save-period", type=int, default=-1,
+                   help="checkpoint every N epochs; -1 = last/best only")
     p.add_argument("--resume", action="store_true")
     p.add_argument("--name", default=None)
     p.add_argument("--no-compile", action="store_true",
@@ -180,6 +216,36 @@ def main() -> None:
     batch = args.batch if args.batch is not None else cfg["batch"]
 
     model = RTDETR(weights)
+
+    # model.train() builds its trainer internally and runs atomically, so
+    # trainer-level patches can only be applied via callbacks. This one fires
+    # at the end of _setup_train, after the optimizer exists. (An earlier
+    # version shipped use_fused_adamw() with no way to ever call it.)
+    def _apply_trainer_patches(trainer):
+        fused = use_fused_adamw(trainer)
+        bblr = args.bblr if args.bblr is not None else cfg.get("bblr")
+        moved = 0
+        if bblr:
+            moved = use_backbone_lr_multiplier(trainer, bblr)
+            assert moved > 0, "backbone LR patch moved 0 params"
+            lrs = sorted({g["lr"] for g in trainer.optimizer.param_groups})
+            assert len(lrs) > 1, f"expected >1 distinct LR, got {lrs}"
+        print(f"trainer patches: fused_adamw={fused} bblr={bblr} "
+              f"backbone_params={moved}")
+
+    def _check_pause(trainer):
+        if PAUSE_FILE.exists():
+            trainer.stop = True
+            ep = trainer.epoch + 1
+            print("", flush=True)
+            print(f"PAUSE file found -- stopping cleanly after epoch {ep}."
+                  f" Checkpoint saved.", flush=True)
+            print(f"  resume with: rm {PAUSE_FILE} && python scripts/train.py"
+                  f" --stage {args.stage} --resume", flush=True)
+
+    model.add_callback("on_pretrain_routine_end", _apply_trainer_patches)
+    model.add_callback("on_fit_epoch_end", _check_pause)
+
     print(f"stage {args.stage}: {weights} -> {cfg['data']} "
           f"(imgsz={imgsz} batch={batch} freeze={freeze} resume={bool(resume)} "
           f"compile={use_compile})")
@@ -194,6 +260,7 @@ def main() -> None:
         device=args.device,
         fraction=args.fraction,
         patience=args.patience,
+        save_period=args.save_period,
         resume=resume,
         project=str(RUNS),
         name=run_name,
