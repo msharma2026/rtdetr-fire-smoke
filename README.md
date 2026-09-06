@@ -18,7 +18,6 @@ D-Fire held-out test set (4,306 images), RTX 4080.
 | | mAP50 | mAP50-95 | fire mAP50 | smoke mAP50 |
 |---|---|---|---|---|
 | **RT-DETR-L (this repo)** | **0.8352 ± 0.0008** | **0.4854 ± 0.0010** | 0.797 | 0.875 |
-| FASDD-pretrained only, zero-shot | 0.6364 | — | — | — |
 
 Mean ± sd over 3 seeds. FASDD pretraining is worth **+0.0386 mAP50**
 (95% CI [+0.0253, +0.0520]).
