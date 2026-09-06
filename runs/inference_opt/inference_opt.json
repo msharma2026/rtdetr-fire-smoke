@@ -1,0 +1,37 @@
+{
+  "eager fp32": {
+    "median_ms": 33.92,
+    "p95_ms": 49.4,
+    "p99_ms": 52.43,
+    "min_ms": 16.77,
+    "fps_median": 29.5
+  },
+  "cudagraphs fp32": {
+    "median_ms": 15.26,
+    "p95_ms": 17.09,
+    "p99_ms": 17.55,
+    "min_ms": 12.77,
+    "fps_median": 65.5
+  },
+  "cudagraphs fp32 + TF32": {
+    "median_ms": 9.05,
+    "p95_ms": 10.67,
+    "p99_ms": 11.05,
+    "min_ms": 6.62,
+    "fps_median": 110.5
+  },
+  "cudagraphs fp16": {
+    "median_ms": 5.19,
+    "p95_ms": 5.76,
+    "p99_ms": 6.16,
+    "min_ms": 3.32,
+    "fps_median": 192.6
+  },
+  "cudagraphs fp16 + channels_last": {
+    "median_ms": 5.23,
+    "p95_ms": 5.78,
+    "p99_ms": 5.92,
+    "min_ms": 3.36,
+    "fps_median": 191.4
+  }
+}

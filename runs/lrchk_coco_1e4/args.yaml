@@ -1,8 +1,8 @@
 task: detect
 mode: train
-model: /home/ubuntu/repos/fire_detection/runs/stage1_fasdd/weights/last.pt
-data: /home/ubuntu/repos/fire_detection/data/fasdd.yaml
-epochs: 80
+model: rtdetr-l.pt
+data: /home/ubuntu/repos/fire_detection/data/dfire.yaml
+epochs: 10
 time: null
 patience: 0
 batch: 16
@@ -11,9 +11,9 @@ save: true
 save_period: 10
 cache: false
 device: '0'
-workers: 8
+workers: 4
 project: /home/ubuntu/repos/fire_detection/runs
-name: stage1_fasdd
+name: lrchk_coco_1e4
 exist_ok: true
 pretrained: true
 cls_remap: true
@@ -25,7 +25,7 @@ single_cls: false
 rect: false
 cos_lr: false
 close_mosaic: 10
-resume: /home/ubuntu/repos/fire_detection/runs/stage1_fasdd/weights/last.pt
+resume: false
 amp: true
 fraction: 1.0
 profile: false
@@ -72,7 +72,7 @@ simplify: true
 opset: null
 workspace: null
 nms: false
-lr0: 0.0003
+lr0: 0.0001
 lrf: 0.01
 momentum: 0.937
 weight_decay: 0.0005
@@ -113,4 +113,4 @@ auto_augment: randaugment
 erasing: 0.4
 cfg: null
 tracker: tracktrack.yaml
-save_dir: /home/ubuntu/repos/fire_detection/runs/stage1_fasdd
+save_dir: /home/ubuntu/repos/fire_detection/runs/lrchk_coco_1e4

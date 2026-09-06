@@ -1,0 +1,30 @@
+[
+  {
+    "arm": "fasdd_frz10",
+    "fasdd_map50": 0.7835,
+    "fasdd_map": 0.5224,
+    "drop_map50": -0.0203,
+    "drop_map": -0.0221
+  },
+  {
+    "arm": "coco_frz10",
+    "fasdd_map50": 0.5553,
+    "fasdd_map": 0.3044,
+    "drop_map50": -0.2485,
+    "drop_map": -0.2401
+  },
+  {
+    "arm": "fasdd_bblr03",
+    "fasdd_map50": 0.7682,
+    "fasdd_map": 0.5029,
+    "drop_map50": -0.0356,
+    "drop_map": -0.0416
+  },
+  {
+    "arm": "coco_bblr03",
+    "fasdd_map50": 0.5628,
+    "fasdd_map": 0.3149,
+    "drop_map50": -0.241,
+    "drop_map": -0.2296
+  }
+]
