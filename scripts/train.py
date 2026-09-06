@@ -84,6 +84,7 @@ from patches import (  # noqa: E402
     patch_hgblock_for_compile,
     patch_mha_fast_path,
     patch_rtdetr_loss_syncs,
+    patch_build_optimizer,
     use_backbone_lr_multiplier,
     use_fused_adamw,
 )
@@ -173,6 +174,21 @@ def main() -> None:
     p.add_argument("--patience", type=int, default=15, help="early-stop; cheap insurance on long runs")
     p.add_argument("--save-period", type=int, default=-1,
                    help="checkpoint every N epochs; -1 = last/best only")
+    # Needed for the annealed, mosaic-free polish phase: stage 1 plateaued at
+    # ~1.1e-4 for 16 epochs, and the previous 30-epoch run showed its whole
+    # tail gain (+0.031) came from annealing that LR down, not from more steps
+    # at it. These let a short run replicate that tail directly.
+    p.add_argument("--lrf", type=float, default=None,
+                   help="final LR as a fraction of lr0 (Ultralytics default 0.01)")
+    p.add_argument("--mosaic", type=float, default=None,
+                   help="mosaic probability; 0 disables (probed as ~neutral)")
+    p.add_argument("--warmup", type=float, default=None,
+                   help="warmup epochs; 0 when continuing from trained weights")
+    # [added by Claude 2026-08-19] seed was hardcoded to 0, so repeat runs
+    # shared head init and data order and could differ only by GPU
+    # nondeterminism. Needed to measure run-to-run variance.
+    p.add_argument("--seed", type=int, default=0,
+                   help="RNG seed; vary it to measure run-to-run variance")
     p.add_argument("--resume", action="store_true")
     p.add_argument("--name", default=None)
     p.add_argument("--no-compile", action="store_true",
@@ -221,17 +237,24 @@ def main() -> None:
     # trainer-level patches can only be applied via callbacks. This one fires
     # at the end of _setup_train, after the optimizer exists. (An earlier
     # version shipped use_fused_adamw() with no way to ever call it.)
+    # The optimizer must have its final param-group layout BEFORE
+    # resume_training() loads saved state (trainer.py:413), which is two lines
+    # earlier than on_pretrain_routine_end (:415). Patching build_optimizer
+    # (:300) is the only hook early enough. Doing this from the callback is
+    # what broke --resume 33 epochs into the 80-epoch run.
+    bblr = args.bblr if args.bblr is not None else cfg.get("bblr")
+    patch_build_optimizer(mult=bblr)
+
     def _apply_trainer_patches(trainer):
-        fused = use_fused_adamw(trainer)
-        bblr = args.bblr if args.bblr is not None else cfg.get("bblr")
-        moved = 0
+        from ultralytics.engine.trainer import BaseTrainer
+        st = getattr(BaseTrainer, "_bopt_stats", None)
+        assert st, "build_optimizer patch never ran"
+        assert st["fused"], "optimizer is not fused"
         if bblr:
-            moved = use_backbone_lr_multiplier(trainer, bblr)
-            assert moved > 0, "backbone LR patch moved 0 params"
+            assert st["backbone_params"] > 0, "no backbone params were split"
             lrs = sorted({g["lr"] for g in trainer.optimizer.param_groups})
             assert len(lrs) > 1, f"expected >1 distinct LR, got {lrs}"
-        print(f"trainer patches: fused_adamw={fused} bblr={bblr} "
-              f"backbone_params={moved}")
+        print(f"trainer patches: {st}")
 
     def _check_pause(trainer):
         if PAUSE_FILE.exists():
@@ -268,8 +291,11 @@ def main() -> None:
         # see module docstring -- both of these are load-bearing
         optimizer="AdamW",
         lr0=args.lr0 or cfg["lr0"],
+        **({"lrf": args.lrf} if args.lrf is not None else {}),
+        **({"mosaic": args.mosaic} if args.mosaic is not None else {}),
+        **({"warmup_epochs": args.warmup} if args.warmup is not None else {}),
         deterministic=False,
-        seed=0,
+        seed=args.seed,
         # NHWC memory layout: what cuDNN's Tensor-Core conv kernels want
         # natively. NCHW forces a transpose around every conv, inflating both
         # kernel count and launch overhead -- and launch overhead is the

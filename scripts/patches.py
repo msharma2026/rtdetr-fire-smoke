@@ -489,3 +489,72 @@ def set_grad_clip(max_norm: float = 0.1) -> bool:
     BaseTrainer.optimizer_step = optimizer_step
     BaseTrainer._clip_patched = True
     return True
+
+def patch_build_optimizer(mult=None, n_backbone: int = 10) -> bool:
+    """Make BaseTrainer.build_optimizer return a *fused* AdamW whose backbone
+    parameters sit in their own reduced-LR groups.
+
+    Replaces both use_fused_adamw() and use_backbone_lr_multiplier() in
+    production. Those two rebuilt trainer.optimizer from an
+    on_pretrain_routine_end callback, which is AFTER resume_training() loads
+    optimizer state (trainer.py:413 vs :415). A resumed run therefore tried to
+    push a 6-group state dict into a 3-group optimizer and died with
+    "loaded state dict has a different number of parameter groups" -- 33 epochs
+    in, where it costs the most.
+
+    Building the final structure inside build_optimizer (:300) means the group
+    layout is correct before resume_training() ever runs, and _setup_scheduler()
+    (:308) stamps initial_lr onto the groups we created.
+
+    mult=None keeps a single LR (fused only). Returns True if newly applied.
+    """
+    import torch as _t
+    from ultralytics.engine.trainer import BaseTrainer
+
+    if getattr(BaseTrainer, "_bopt_patched", False):
+        return False
+    _orig = BaseTrainer.build_optimizer
+
+    def build_optimizer(self, model, *a, **kw):
+        opt = _orig(self, model, *a, **kw)
+        if not isinstance(opt, _t.optim.AdamW):
+            return opt
+
+        core = getattr(model, "_orig_mod", model)
+        names = {id(p): n.replace("_orig_mod.", "")
+                 for n, p in core.named_parameters()}
+        prefixes = tuple(f"model.{i}." for i in range(n_backbone))
+
+        keep = ("weight_decay", "betas", "eps")
+        groups, moved = [], 0
+        for g in opt.param_groups:
+            lr, hp = g["lr"], {k: g[k] for k in keep if k in g}
+            if mult is None:
+                groups.append({"params": g["params"], "lr": lr,
+                               "initial_lr": lr, **hp})
+                continue
+            bb = [p for p in g["params"]
+                  if names.get(id(p), "").startswith(prefixes)]
+            rest = [p for p in g["params"]
+                    if not names.get(id(p), "").startswith(prefixes)]
+            moved += len(bb)
+            # order matters: the saved state dict is positional, so backbone
+            # group must precede its sibling exactly as it did when saved
+            if bb:
+                groups.append({"params": bb, "lr": lr * mult,
+                               "initial_lr": lr * mult, **hp})
+            if rest:
+                groups.append({"params": rest, "lr": lr,
+                               "initial_lr": lr, **hp})
+
+        fused = dict(fused=True) if _t.cuda.is_available() else {}
+        new = _t.optim.AdamW(groups, **fused)
+        BaseTrainer._bopt_stats = {"groups": len(new.param_groups),
+                                   "backbone_params": moved,
+                                   "mult": mult,
+                                   "fused": bool(fused)}
+        return new
+
+    BaseTrainer.build_optimizer = build_optimizer
+    BaseTrainer._bopt_patched = True
+    return True
