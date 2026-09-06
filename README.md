@@ -21,13 +21,7 @@ D-Fire held-out test set (4,306 images), RTX 4080.
 | FASDD-pretrained only, zero-shot | 0.6364 | — | — | — |
 
 Mean ± sd over 3 seeds. FASDD pretraining is worth **+0.0386 mAP50**
-(95% CI [+0.0253, +0.0520]) against the same architecture initialised from
-COCO and fine-tuned identically — both arms tuned separately, so the
-comparison is not handicapped by a shared learning rate.
-
-Run-to-run σ differs sharply by initialisation: **0.0008** for FASDD-init,
-**0.0083** for COCO-init. Any comparison here should be read against the
-relevant one.
+(95% CI [+0.0253, +0.0520]).
 
 ### Against the D-Fire authors' own models
 
@@ -49,10 +43,6 @@ RT-DETR is NMS-free, so its tail stays flat as detections accumulate: on the
 busiest test frames latency rises **17%** against YOLOv5l's **59%**. That is
 why it holds a 7.46 ms p99 while being 1.13× its own median, where YOLOv5l
 sits at 2.1× its own.
-
-> Caveat: the YOLOv5 rows were scored with upstream `yolov5/val.py`, which
-> rejects 8 malformed labels in D-Fire's test set against Ultralytics' 4
-> (4,298 vs 4,302 images). ~0.1% of the set; it does not move the ordering.
 
 Reproduce: `scripts/bench_headtohead.py` (latency), `scripts/evaluate.py`
 (accuracy).
