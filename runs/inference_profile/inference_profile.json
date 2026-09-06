@@ -1,0 +1,86 @@
+[
+  {
+    "batch": 1,
+    "precision": "fp32",
+    "mean_ms": 25.87,
+    "median_ms": 19.43,
+    "p95_ms": 51.36,
+    "p99_ms": 57.18,
+    "min_ms": 15.04,
+    "fps_batch1_equiv": 38.6,
+    "peak_vram_gb": 0.32,
+    "gpu_util_mean": 60.9
+  },
+  {
+    "batch": 1,
+    "precision": "fp16",
+    "mean_ms": 27.42,
+    "median_ms": 22.96,
+    "p95_ms": 45.63,
+    "p99_ms": 47.38,
+    "min_ms": 14.42,
+    "fps_batch1_equiv": 36.5,
+    "peak_vram_gb": 0.32,
+    "gpu_util_mean": 50
+  },
+  {
+    "batch": 1,
+    "precision": "fp16",
+    "mean_ms": 29.24,
+    "median_ms": 25.61,
+    "p95_ms": 48.32,
+    "p99_ms": 57.73,
+    "min_ms": 15.86,
+    "fps_batch1_equiv": 34.2,
+    "peak_vram_gb": 0.32,
+    "gpu_util_mean": 50.1
+  },
+  {
+    "batch": 2,
+    "precision": "fp16",
+    "mean_ms": 31.77,
+    "median_ms": 32.72,
+    "p95_ms": 44.74,
+    "p99_ms": 56.34,
+    "min_ms": 16.78,
+    "fps_batch1_equiv": 62.9,
+    "peak_vram_gb": 0.37,
+    "gpu_util_mean": 57.6
+  },
+  {
+    "batch": 4,
+    "precision": "fp16",
+    "mean_ms": 39.57,
+    "median_ms": 36.85,
+    "p95_ms": 64.94,
+    "p99_ms": 67.2,
+    "min_ms": 21.23,
+    "fps_batch1_equiv": 101.1,
+    "peak_vram_gb": 0.48,
+    "gpu_util_mean": 66.1
+  },
+  {
+    "batch": 8,
+    "precision": "fp16",
+    "mean_ms": 53.27,
+    "median_ms": 54.15,
+    "p95_ms": 65.31,
+    "p99_ms": 69.68,
+    "min_ms": 40.76,
+    "fps_batch1_equiv": 150.2,
+    "peak_vram_gb": 0.74,
+    "gpu_util_mean": 82.6
+  },
+  {
+    "batch": 16,
+    "precision": "fp16",
+    "mean_ms": 90.55,
+    "median_ms": 90.67,
+    "p95_ms": 98.43,
+    "p99_ms": 100.71,
+    "min_ms": 79.87,
+    "fps_batch1_equiv": 176.7,
+    "peak_vram_gb": 1.27,
+    "gpu_util_mean": 93.9
+  }
+]

@@ -1,0 +1,128 @@
+{
+  "rtdetr-l_fp32": {
+    "e2e": {
+      "mean_ms": 23.63,
+      "p50_ms": 17.92,
+      "p95_ms": 35.48,
+      "p99_ms": 48.35,
+      "fps_mean": 42.3,
+      "fps_p99": 20.7,
+      "peak_vram_gb": 0.321,
+      "mean_detections": 0.03
+    },
+    "forward": {
+      "mean_ms": 23.32,
+      "p50_ms": 16.83,
+      "p95_ms": 45.46,
+      "p99_ms": 47.99,
+      "fps_mean": 42.9,
+      "fps_p99": 20.8,
+      "peak_vram_gb": 0.321
+    }
+  },
+  "yolov5s_fp32": {
+    "e2e": {
+      "mean_ms": 6.96,
+      "p50_ms": 5.62,
+      "p95_ms": 11.8,
+      "p99_ms": 15.26,
+      "fps_mean": 143.8,
+      "fps_p99": 65.5,
+      "peak_vram_gb": 0.214,
+      "mean_detections": 0.07
+    },
+    "forward": {
+      "mean_ms": 6.26,
+      "p50_ms": 5.1,
+      "p95_ms": 9.92,
+      "p99_ms": 10.46,
+      "fps_mean": 159.8,
+      "fps_p99": 95.6,
+      "peak_vram_gb": 0.214
+    }
+  },
+  "yolov5l_fp32": {
+    "e2e": {
+      "mean_ms": 18.19,
+      "p50_ms": 21.34,
+      "p95_ms": 25.93,
+      "p99_ms": 29.64,
+      "fps_mean": 55.0,
+      "fps_p99": 33.7,
+      "peak_vram_gb": 0.497,
+      "mean_detections": 0.05
+    },
+    "forward": {
+      "mean_ms": 9.74,
+      "p50_ms": 8.0,
+      "p95_ms": 15.15,
+      "p99_ms": 22.09,
+      "fps_mean": 102.7,
+      "fps_p99": 45.3,
+      "peak_vram_gb": 0.497
+    }
+  },
+  "rtdetr-l_fp16": {
+    "e2e": {
+      "mean_ms": 18.15,
+      "p50_ms": 14.52,
+      "p95_ms": 45.76,
+      "p99_ms": 50.17,
+      "fps_mean": 55.1,
+      "fps_p99": 19.9,
+      "peak_vram_gb": 0.409,
+      "mean_detections": 0.03
+    },
+    "forward": {
+      "mean_ms": 19.56,
+      "p50_ms": 13.86,
+      "p95_ms": 44.55,
+      "p99_ms": 48.96,
+      "fps_mean": 51.1,
+      "fps_p99": 20.4,
+      "peak_vram_gb": 0.409
+    }
+  },
+  "yolov5s_fp16": {
+    "e2e": {
+      "mean_ms": 7.74,
+      "p50_ms": 5.22,
+      "p95_ms": 15.14,
+      "p99_ms": 19.04,
+      "fps_mean": 129.2,
+      "fps_p99": 52.5,
+      "peak_vram_gb": 0.147,
+      "mean_detections": 0.07
+    },
+    "forward": {
+      "mean_ms": 6.73,
+      "p50_ms": 4.33,
+      "p95_ms": 13.69,
+      "p99_ms": 14.6,
+      "fps_mean": 148.6,
+      "fps_p99": 68.5,
+      "peak_vram_gb": 0.147
+    }
+  },
+  "yolov5l_fp16": {
+    "e2e": {
+      "mean_ms": 10.55,
+      "p50_ms": 6.95,
+      "p95_ms": 25.16,
+      "p99_ms": 27.39,
+      "fps_mean": 94.8,
+      "fps_p99": 36.5,
+      "peak_vram_gb": 0.392,
+      "mean_detections": 0.05
+    },
+    "forward": {
+      "mean_ms": 7.13,
+      "p50_ms": 6.25,
+      "p95_ms": 15.83,
+      "p99_ms": 18.33,
+      "fps_mean": 140.2,
+      "fps_p99": 54.6,
+      "peak_vram_gb": 0.392
+    }
+  }
+}

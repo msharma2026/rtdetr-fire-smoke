@@ -1,0 +1,28 @@
+[
+  {
+    "model": "rtdetr-l.pt",
+    "batch": 16,
+    "oom": false,
+    "params_m": 32.8,
+    "iters": 60,
+    "elapsed_s": 21.72,
+    "images_per_s": 44.2,
+    "ms_per_iter": 362.0,
+    "peak_vram_gb": 13.33,
+    "gpu_util_mean": 68.8,
+    "amp": true
+  },
+  {
+    "model": "rtdetr-x.pt",
+    "batch": 16,
+    "oom": false,
+    "params_m": 67.3,
+    "iters": 60,
+    "elapsed_s": 112.84,
+    "images_per_s": 8.51,
+    "ms_per_iter": 1880.6,
+    "peak_vram_gb": 17.94,
+    "gpu_util_mean": 94.5,
+    "amp": true
+  }
+]

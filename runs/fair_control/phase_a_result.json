@@ -1,0 +1,5 @@
+{
+  "coco":  {"best_lr": "3e-4",  "best_map50": 0.80324},
+  "fasdd": {"best_lr": "1e-4", "best_map50": 0.83781},
+  "lrchk_epochs": 10
+}

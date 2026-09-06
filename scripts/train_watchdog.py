@@ -40,14 +40,22 @@ def main() -> None:
     p.add_argument("--stage", type=int, choices=(1, 2), required=True)
     p.add_argument("--max-restarts", type=int, default=30)
     p.add_argument("--cooldown", type=int, default=30, help="seconds between restarts")
+    p.add_argument("--name", default=None,
+                   help="run name; must match what train.py uses so progress is watched in the right directory")
     args, passthrough = p.parse_known_args()
 
-    run_dir = RUNS / STAGE_RUN[args.stage]
+    # Watch the SAME directory train.py writes to. Hardcoding STAGE_RUN here
+    # while forwarding --name to train.py made the watchdog watch the wrong
+    # run: it read 0 epochs after any crash and aborted as "no progress".
+    run_name = args.name or STAGE_RUN[args.stage]
+    run_dir = RUNS / run_name
     attempt = 0
 
     while attempt <= args.max_restarts:
         before = epochs_done(run_dir)
         cmd = [sys.executable, "-u", str(ROOT / "scripts/train.py"), "--stage", str(args.stage)]
+        if args.name:
+            cmd += ["--name", args.name]
         if before > 0:  # a previous attempt got somewhere -- pick up from last.pt
             cmd.append("--resume")
         cmd += passthrough
