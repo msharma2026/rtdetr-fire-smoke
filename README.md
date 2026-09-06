@@ -1,7 +1,7 @@
 # Fire & Smoke Detection with RT-DETR
 
 Two-stage RT-DETR detector for fire and smoke, pretrained on **FASDD** and
-fine-tuned on **D-Fire**.
+fine-tuned on **D-Fire**: ran sequentially to measure model drift.
 
 The idea is coarse-to-fine transfer: FASDD (95k images) is large and varied
 enough to learn general fire/smoke features, while D-Fire (21.5k images) is
