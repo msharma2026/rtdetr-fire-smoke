@@ -125,8 +125,10 @@ PAUSE_FILE = ROOT / "PAUSE"
 # freeze=10 pins model.0-model.9 (the HGNetv2 CNN backbone, ~13.5M params /
 # 41% of the net). The neck (AIFI encoder + RepC3 fusion) and RTDETRDecoder
 # stay trainable. Rationale: FASDD and D-Fire are the same task, so low-level
-# fire/smoke features should transfer; freezing them is a hard guarantee
-# against catastrophic forgetting that a low LR only softens.
+# fire/smoke features should transfer. Freezing the backbone was the original
+# guess -- MEASURED WRONG: freeze=10 loses 0.028 mAP50 to unfreezing at a 0.3x
+# backbone LR, under both COCO and FASDD initialisation. A low LR does not
+# merely "soften" the guarantee, it outperforms it.
 STAGES = {
     1: {
         "data": "fasdd.yaml", "epochs": 80, "lr0": 3e-4,
@@ -134,11 +136,18 @@ STAGES = {
         "bblr": 0.3,
     },
     2: {
-        "data": "dfire.yaml", "epochs": 30, "lr0": 3e-5,
-        "imgsz": 640, "batch": 16, "freeze": 10, "name": "stage2_dfire",
-        # stage 2 already freezes the backbone outright, so a backbone LR
-        # multiplier would be a no-op on top of requires_grad=False.
-        "bblr": None,
+        # Measured recipe (3 seeds, D-Fire test mAP50 0.8352 +/- 0.0008):
+        #   lr0=1e-4  -- 3e-5 was inherited from stage-1 tuning and costs a
+        #                COCO-initialised arm 0.078 mAP50. Both arms were
+        #                re-tuned with a ladder extended until the winner was
+        #                interior, so neither is a grid edge.
+        #   epochs=20 -- LR anneals over the TOTAL run length, so a longer
+        #                run's mid-schedule checkpoint never completes its
+        #                anneal. 60 epochs scores 0.0137 BELOW 20 (~17 sigma).
+        #   freeze=0  -- see the note above STAGES.
+        "data": "dfire.yaml", "epochs": 20, "lr0": 1e-4,
+        "imgsz": 640, "batch": 16, "freeze": 0, "name": "stage2_dfire",
+        "bblr": 0.3,
     },
 }
 
