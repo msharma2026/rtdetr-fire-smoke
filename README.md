@@ -268,6 +268,7 @@ scripts/
 ├── seed_variance.sh     # 3 seeds x 2 arms, for error bars
 ├── stage2_arms.sh       # {COCO,FASDD} x {freeze,bblr} factorial
 ├── test_ladder.sh       # unit tests for the LR-ladder logic (no GPU)
+├── test_dynamo_trace.py # shows which Ultralytics blocks torch.compile breaks
 ├── load_optimized.py    # fp16 + CUDA graphs inference config
 ├── optimize_inference.py # inference optimization sweep
 ├── profile_inference.py # batch-1 latency / VRAM / utilisation
