@@ -170,6 +170,9 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--stage", type=int, choices=(1, 2), required=True)
     p.add_argument("--weights", default=None, help="override starting checkpoint")
+    p.add_argument("--data", default=None,
+                   help="override cfg data yaml, e.g. joint_r5.5.yaml for the"
+                        " pooled-dataset experiment (relative to DATA/)")
     p.add_argument("--epochs", type=int, default=None)
     p.add_argument("--batch", type=int, default=None, help="see VRAM table in module docstring")
     p.add_argument("--imgsz", type=int, default=None)
@@ -193,7 +196,7 @@ def main() -> None:
                    help="mosaic probability; 0 disables (probed as ~neutral)")
     p.add_argument("--warmup", type=float, default=None,
                    help="warmup epochs; 0 when continuing from trained weights")
-    # [added by Claude 2026-08-19] seed was hardcoded to 0, so repeat runs
+    # seed was hardcoded to 0, so repeat runs
     # shared head init and data order and could differ only by GPU
     # nondeterminism. Needed to measure run-to-run variance.
     p.add_argument("--seed", type=int, default=0,
@@ -220,6 +223,7 @@ def main() -> None:
         patch_hgblock_for_compile()
 
     cfg = STAGES[args.stage]
+    data_file = args.data or cfg["data"]
     run_name = args.name or cfg["name"]
 
     # --resume must pass an explicit path. Ultralytics treats resume=True as
@@ -278,12 +282,12 @@ def main() -> None:
     model.add_callback("on_pretrain_routine_end", _apply_trainer_patches)
     model.add_callback("on_fit_epoch_end", _check_pause)
 
-    print(f"stage {args.stage}: {weights} -> {cfg['data']} "
+    print(f"stage {args.stage}: {weights} -> {data_file} "
           f"(imgsz={imgsz} batch={batch} freeze={freeze} resume={bool(resume)} "
           f"compile={use_compile})")
 
     model.train(
-        data=str(DATA / cfg["data"]),
+        data=str(DATA / data_file),
         epochs=args.epochs or cfg["epochs"],
         batch=batch,
         imgsz=imgsz,

@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 # Run-to-run variance: 3 seeds x 2 arms, 20 epochs each, D-Fire test eval.
 #
-# WRITTEN BY CLAUDE (2026-08-19). Not the project author's code -- edit or
-# delete freely. See NOTES_BY_CLAUDE_2026-08-18.md section 8.2.
-#
 # WHY: every number in this project is a single seed, so no comparison has an
 # error bar. The fair-control rerun measured a +0.0328 mAP50 pretraining
 # effect; `freeze=0` over `freeze=10` was +0.028; the retention edge that

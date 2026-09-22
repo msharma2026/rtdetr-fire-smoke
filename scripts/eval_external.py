@@ -1,8 +1,5 @@
 """Evaluate the project's checkpoints on an EXTERNAL fire/smoke dataset.
 
-WRITTEN BY CLAUDE (2026-08-20). Not the project author's code -- edit or
-delete freely. See NOTES_BY_CLAUDE_2026-08-18.md section 3.1.
-
 Answers the generalization question that no D-Fire number can: is
 `fasdd_frz10`'s FASDD-retention advantage real transferable ability, or
 memorised FASDD annotation conventions?

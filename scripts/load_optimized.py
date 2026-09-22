@@ -1,8 +1,5 @@
 """Load the fire detector in its fast inference configuration.
 
-WRITTEN BY CLAUDE (2026-09-06). Not the project author's code -- edit or
-delete freely. See NOTES_BY_CLAUDE_2026-08-18.md section 10.
-
 Eager inference is launch-bound: fp16 alone buys 0.98x (nothing), the GPU idles
 at 52% of max SM clock, and p99 is 2.4x the median. CUDA graphs remove the
 dispatch bottleneck, which makes the model compute-bound -- and only THEN does

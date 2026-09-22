@@ -1,8 +1,5 @@
 """Inference optimization sweep for RT-DETR-L, batch 1, 640x640.
 
-WRITTEN BY CLAUDE (2026-09-06). Not the project author's code -- edit or
-delete freely.
-
 Context: eager inference was measured launch-bound (fp16 gave 0.98x, i.e.
 nothing; batch 1->16 scaled 4.84x; GPU sat at 52% of max SM clock). CUDA
 graphs via torch.compile(mode="reduce-overhead") then gave 2.0x median and

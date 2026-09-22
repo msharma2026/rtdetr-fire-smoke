@@ -2,9 +2,6 @@
 # Fair-control rerun: fixes the defects that make the stage-2 factorial's
 # effect sizes upper bounds rather than estimates.
 #
-# WRITTEN BY CLAUDE (2026-08-18). Not the project author's code -- edit or
-# delete freely. See NOTES_BY_CLAUDE_2026-08-18.md section 3.2.
-#
 # Defect 1: every arm of the 2026-08-18 factorial peaked at epoch 29 or 30
 #           of 30. Nothing had converged, so the gap between arms is whatever
 #           it happened to be when the budget ran out.

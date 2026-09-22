@@ -1,8 +1,5 @@
 """Inference hardware profile: what would it take to run this in real time?
 
-WRITTEN BY CLAUDE (2026-08-20). Not the project author's code -- edit or
-delete freely.
-
 This runs BEFORE the real-time benchmark, to establish which regime the model
 is in at batch 1. That determines how (and whether) results extrapolate to
 other hardware:

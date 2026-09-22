@@ -1,8 +1,5 @@
 """Head-to-head latency: our RT-DETR-L vs Venancio's YOLOv5s/YOLOv5l.
 
-WRITTEN BY CLAUDE (2026-09-06). Not the project author's code -- edit or
-delete freely.
-
 Both models measured on the SAME machine, SAME images, SAME protocol, so the
 comparison is free of the cross-paper confounds that made every published
 D-Fire number unusable (different hardware, different batch size, unstated

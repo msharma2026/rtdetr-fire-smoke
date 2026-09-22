@@ -1,8 +1,8 @@
 """FASDD val retention for the 3 seed-variance FASDD-arm checkpoints.
 
-WRITTEN BY CLAUDE (2026-08-20). Completes the retention picture for the
-current best recipe (20 ep, lr 1e-4) and gives it an error bar, which none of
-the earlier single-run retention numbers have.
+Completes the retention picture for the current best recipe (20 ep, lr 1e-4)
+and gives it an error bar, which none of the earlier single-run retention
+numbers have.
 
 Baseline for comparison: stage 1 alone scores 0.8038 on this same FASDD val
 split; the COCO-init arms, which never saw FASDD, score ~0.556.

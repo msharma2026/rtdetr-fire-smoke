@@ -1,9 +1,6 @@
 """RT-DETR-X vs RT-DETR-L: VRAM and throughput probe.
 
-WRITTEN BY CLAUDE (2026-08-18). Not the project author's code -- edit or
-delete freely. See NOTES_BY_CLAUDE_2026-08-18.md.
-
-Settles OPEN_ITEMS.md 3.1 / 4.7, deferred since before stage 1 on a
+Settles a question deferred since before stage 1 on a
 one-sentence estimate that X "roughly doubles" epoch time. That estimate
 assumed compute scales to wall-clock, which is exactly what this
 dispatch-bound pipeline does not do. X is 2.05x the params but only 1.14x
