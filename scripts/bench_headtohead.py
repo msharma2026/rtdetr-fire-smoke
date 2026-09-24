@@ -185,14 +185,16 @@ def bench_rtdetr_e2e_graphs(images, warm_seconds=8.0):
     processes) puts the entire gap on CUDA graphs: 2.95x, with the other two
     contributing nothing on the eager path.
 
-    YOLO has no equivalent configuration. NMS produces a data-dependent number
-    of boxes, so its graph cannot be captured -- which is why only the RT-DETR
-    row needs this and why the comparison is not like-for-like tooling.
+    The YOLO rows here stay eager, so this table is NOT like-for-like tooling.
+    That is a limitation of this script, not of YOLO: NMS runs after the
+    forward pass, so YOLOv5's forward captures fine and compiles to within
+    5 px on box dimensions of its eager output. scripts/bench_optimized.py
+    runs every model compiled, and is the fair comparison.
 
     CALL THIS LAST. Capturing CUDA graphs reserves an allocator pool that
-    slows eager work measured afterwards in the same process -- an earlier
-    version of this benchmark moved YOLOv5s between 248 and 123 FPS purely by
-    changing whether the compiled model was built before or after it.
+    slows eager work measured afterwards in the same process -- enough to move
+    YOLOv5s between 248 and 123 FPS depending only on whether the compiled
+    model was built before or after it.
     """
     import patches
     from ultralytics import RTDETR

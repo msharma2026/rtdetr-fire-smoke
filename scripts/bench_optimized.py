@@ -1,15 +1,15 @@
 """Best-vs-best latency on a REPRESENTATIVE frame sample, with repeats.
 
-Two fixes over the first version:
+Two things it fixes relative to bench_headtohead.py:
 
-1. bench_headtohead.load_images() takes sorted(glob)[:40], which on D-Fire is
+1. Frame sample. load_images() takes sorted(glob)[:40], which on D-Fire is
    0/40 positives -- every frame empty. NMS cost scales with candidate boxes,
    so an all-empty sample is YOLO's best case and understates RT-DETR. This
    samples to match the test set's own positive rate (~53%).
 
-2. YOLOv5l's p50 swung 3.13-6.44 ms across three identical runs, so single
-   runs cannot separate it from RT-DETR. Every config is repeated and the
-   spread is reported alongside the central value.
+2. Repeats. YOLOv5l's p50 spans 3.13-6.44 ms across identical runs, so a
+   single run cannot separate it from RT-DETR. Every config is repeated and
+   the spread is reported alongside the central value.
 
 Every model gets fp16 + TF32 + torch.compile(reduce-overhead) -- CUDA graphs
 for all, not just RT-DETR. One config per process; warmup is wall-clock and
