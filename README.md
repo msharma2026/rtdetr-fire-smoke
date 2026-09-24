@@ -13,10 +13,14 @@ Stage 2 is now **joint** rather than sequential: instead of fine-tuning on
 D-Fire alone, it continues from the FASDD checkpoint on a *pooled* set of both
 datasets with D-Fire oversampled 16×. Fine-tuning on D-Fire alone costs FASDD
 accuracy (0.8038 → 0.7550) — the model trades away what it was pretrained on.
-Training on the pool instead reaches the same D-Fire accuracy in **2 epochs
-instead of 20** while holding FASDD at **0.7901**. The sequential recipe is
-kept because it is the controlled arm the pretraining ablation is measured
-against.
+Training on the pool instead holds FASDD at **0.7901** at the same D-Fire
+accuracy, for about the same cost (2.59 h against 2.95 h). Note the epoch
+counts are not comparable — the pool is 21× larger than D-Fire alone, so its
+2 epochs are 41,720 gradient steps against the sequential recipe's 19,380 over
+20. It is a better model for the same budget, not a cheaper one.
+
+The sequential recipe is kept because it is the controlled arm the pretraining
+ablation is measured against.
 
 ---
 
@@ -24,12 +28,14 @@ against.
 
 D-Fire held-out test set (4,306 images), RTX 4080.
 
-| stage 2 recipe | D-Fire mAP50 | D-Fire mAP50-95 | FASDD val (retention) | epochs |
+| stage 2 recipe | D-Fire mAP50 | D-Fire mAP50-95 | FASDD val (retention) | train time |
 |---|---|---|---|---|
-| **joint pool, D-Fire ×16** | **0.8368** | **0.4866** | **0.7901** | **2** |
-| sequential, D-Fire only | 0.8352 ± 0.0008 | 0.4854 ± 0.0010 | 0.7550 | 20 |
+| **joint pool, D-Fire ×16** | **0.8368** | **0.4866** | **0.7901** | 2.59 h |
+| sequential, D-Fire only | 0.8352 ± 0.0008 | 0.4854 ± 0.0010 | 0.7550 | 2.95 h |
 
-Sequential row is mean ± sd over 3 seeds (fire 0.797 / smoke 0.875 mAP50).
+Joint per-class: fire 0.7988 / smoke 0.8749 mAP50 — within noise of the
+sequential arm's 0.797 / 0.875, so the difference is retention, not detection.
+Sequential row is mean ± sd over 3 seeds.
 FASDD pretraining is worth **+0.0386 mAP50** (95% CI [+0.0253, +0.0520]),
 measured on the sequential arm.
 
@@ -46,23 +52,43 @@ run's 0.7901.
 D-Fire dataset, released YOLOv5s/YOLOv5l fire detectors. Their published
 weights, re-evaluated here on the same test split rather than quoted:
 
-| model | params | mAP50 | mAP50-95 | median | p99 | FPS |
-|---|---|---|---|---|---|---|
-| **RT-DETR-L (this repo)** | 32.8M | **0.835** | **0.486** | 6.59 ms | **7.46 ms** | 152 |
-| YOLOv5l | 46.1M | 0.797 | 0.468 | 7.44 ms | 15.69 ms | 134 |
-| YOLOv5s | 7.0M | 0.785 | 0.445 | **4.46 ms** | 7.47 ms | **224** |
+| model | params | GFLOPs | mAP50 | mAP50-95 | p50 | p99 | FPS |
+|---|---|---|---|---|---|---|---|
+| **RT-DETR-L (this repo)** | **32.0M** | 105.3 | **0.837** | **0.486** | **5.94 ms** | **7.21 ms** | 168 |
+| YOLOv5l | 46.1M | 107.7 | 0.797 | 0.468 | 6.08 ms | 9.95 ms | 165 |
+| YOLOv5s | 7.0M | 15.8 | 0.785 | 0.445 | **3.19 ms** | 6.79 ms | **314** |
 
-Latency is batch-1, end-to-end (letterbox → forward → decode/NMS), 640×640,
-fp16 + CUDA graphs, RTX 4080 — measured identically for all three, since
-published latency figures are rarely comparable across papers.
+**Every model at its own fastest configuration** — fp16 + TF32 +
+`torch.compile(mode="reduce-overhead")`, i.e. CUDA graphs for all three, not
+just ours. RT-DETR additionally runs 100 queries and 4 decoder layers, which
+is separately measured as accuracy-neutral (+0.0011 mAP50) and has no YOLO
+equivalent. Batch 1, 640×640, RTX 4080; median of 5 runs, each config in its
+own process.
 
-RT-DETR is NMS-free, so its tail stays flat as detections accumulate: on the
-busiest test frames latency rises **17%** against YOLOv5l's **59%**. That is
-why it holds a 7.46 ms p99 while being 1.13× its own median, where YOLOv5l
-sits at 2.1× its own.
+Two measurement choices that matter, both learned by getting them wrong first:
 
-Reproduce: `scripts/bench_headtohead.py` (latency), `scripts/evaluate.py`
-(accuracy).
+- **Frames are sampled to match the test set's 52% positive rate.** Taking the
+  first 40 files instead gives 0/40 positives, which leaves NMS nothing to
+  suppress and understates any NMS-free advantage. On empty frames YOLOv5s
+  measures 1.70 ms; on representative frames, 3.19 ms.
+- **Each config runs in a separate process.** CUDA-graph capture reserves an
+  allocator pool that slows anything measured afterwards in the same process —
+  enough to move YOLOv5s between 248 and 123 FPS purely by reordering.
+
+Against YOLOv5l — the comparable model at 107.7 vs 105.3 GFLOPs — RT-DETR wins
+on accuracy, parameters, median and tail. The tail is the decisive one:
+**7.21 ms vs 9.95 ms p99**, winning in all 5 runs individually, with a
+p99/p50 ratio of 1.21 against 1.64. RT-DETR also returns ~45% more detections
+per frame (1.99 vs 1.37) at that latency.
+
+YOLOv5s remains ~1.9× faster on the median and is the right choice if 5 points
+of mAP50 are affordable. Note its p99 (6.79 ms) is close to RT-DETR's despite
+the median gap, and its run-to-run spread is 2.22–4.21 ms against RT-DETR's
+5.90–6.39.
+
+Reproduce: `scripts/bench_optimized.py` (latency), `scripts/evaluate.py`
+(accuracy). `scripts/bench_headtohead.py` holds the older unoptimised
+comparison.
 
 ---
 

@@ -175,6 +175,77 @@ def bench_rtdetr_e2e(images, half):
     return r, m.model
 
 
+# ------------------------------------------------- rtdetr e2e, deployed path
+def bench_rtdetr_e2e_graphs(images, warm_seconds=8.0):
+    """RT-DETR end-to-end with CUDA graphs -- the configuration the published
+    152 FPS came from, which bench_rtdetr_e2e() above does NOT apply.
+
+    Plain predict() measures 12-20 ms here against a published 6.59 ms. An
+    ablation (MHA fast path / TF32 / CUDA graphs, one at a time, separate
+    processes) puts the entire gap on CUDA graphs: 2.95x, with the other two
+    contributing nothing on the eager path.
+
+    YOLO has no equivalent configuration. NMS produces a data-dependent number
+    of boxes, so its graph cannot be captured -- which is why only the RT-DETR
+    row needs this and why the comparison is not like-for-like tooling.
+
+    CALL THIS LAST. Capturing CUDA graphs reserves an allocator pool that
+    slows eager work measured afterwards in the same process -- an earlier
+    version of this benchmark moved YOLOv5s between 248 and 123 FPS purely by
+    changing whether the compiled model was built before or after it.
+    """
+    import patches
+    from ultralytics import RTDETR
+    from ultralytics.utils import ops
+
+    patches.patch_hgblock_for_compile()   # dynamo mistraces HGBlock without it
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+
+    module = RTDETR(str(RTDETR_CKPT)).model.cuda().eval().half()
+    compiled = torch.compile(module, mode="reduce-overhead", dynamic=False)
+
+    def one(im0):
+        t = torch.from_numpy(np.ascontiguousarray(
+            im0.transpose((2, 0, 1))[::-1])).to("cuda").half().div_(255.0)
+        out = compiled(t[None])
+        out = out[0] if isinstance(out, (list, tuple)) else out
+        # RTDETRDecoder already argmaxes in eval: columns are
+        # [cx, cy, w, h, conf, class_id], NOT per-class scores. Taking a max
+        # over columns 4: would include the class id (1.0 for smoke) and pass
+        # every smoke query through any threshold.
+        kept = ops.xywh2xyxy(out[..., :4])[out[..., 4] > 0.25]
+        h, w = im0.shape[:2]
+        kept[..., [0, 2]] *= w
+        kept[..., [1, 3]] *= h
+        return kept
+
+    one(images[0])            # first call compiles (27-42 s); keep it out of
+    torch.cuda.synchronize()  # the warmup budget or warmup measures nothing
+
+    deadline = time.perf_counter() + warm_seconds
+    i = 0
+    while time.perf_counter() < deadline:
+        one(images[i % len(images)])
+        i += 1
+    torch.cuda.synchronize()
+    torch.cuda.reset_peak_memory_stats()
+
+    lat, ndet = [], []
+    for k in range(ITERS):
+        im0 = images[k % len(images)]
+        t0 = time.perf_counter()
+        kept = one(im0)
+        torch.cuda.synchronize()
+        lat.append((time.perf_counter() - t0) * 1000)
+        ndet.append(len(kept))
+    r = pct(lat)
+    r["peak_vram_gb"] = round(torch.cuda.max_memory_reserved() / 1e9, 3)
+    r["mean_detections"] = round(st.mean(ndet), 2)
+    r["warm_iters"] = i
+    return r
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     images = load_images()
@@ -208,6 +279,16 @@ def main():
                   flush=True)
             del mod
             torch.cuda.empty_cache()
+
+        # Deployed RT-DETR config. fp16 only (CUDA graphs need static shapes)
+        # and strictly last, so graph capture cannot slow the rows above.
+        if half:
+            r_g = bench_rtdetr_e2e_graphs(images)
+            results["rtdetr-l-graphs_fp16"] = {"e2e": r_g}
+            print(f"  {'rtdetr-l+graphs':<10} e2e {r_g['mean_ms']:>6.2f} ms "
+                  f"(p99 {r_g['p99_ms']:>6.2f})  "
+                  f"| {r_g['fps_mean']:>5.1f} FPS | dets {r_g['mean_detections']}"
+                  f" | warm {r_g['warm_iters']} iters", flush=True)
         print()
 
     (OUT / "headtohead.json").write_text(json.dumps(results, indent=2))

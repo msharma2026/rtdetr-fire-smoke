@@ -34,18 +34,31 @@ D-Fire dataset, released YOLOv5s/YOLOv5l fire detectors. Their published
 weights, re-evaluated here on the same split under one protocol rather than
 quoted from the paper:
 
-| model | params | mAP50 | mAP50-95 | median | p99 | FPS |
-|---|---|---|---|---|---|---|
-| **RT-DETR-L (this model)** | 32.8M | **0.835** | **0.486** | 6.59 ms | **7.46 ms** | 152 |
-| YOLOv5l | 46.1M | 0.797 | 0.468 | 7.44 ms | 15.69 ms | 134 |
-| YOLOv5s | 7.0M | 0.785 | 0.445 | **4.46 ms** | 7.47 ms | **224** |
+| model | params | GFLOPs | mAP50 | mAP50-95 | p50 | p99 | FPS |
+|---|---|---|---|---|---|---|---|
+| **RT-DETR-L (this model)** | **32.0M** | 105.3 | **0.837** | **0.486** | **5.94 ms** | **7.21 ms** | 168 |
+| YOLOv5l | 46.1M | 107.7 | 0.797 | 0.468 | 6.08 ms | 9.95 ms | 165 |
+| YOLOv5s | 7.0M | 15.8 | 0.785 | 0.445 | **3.19 ms** | 6.79 ms | **314** |
 
-Latency: batch-1, end-to-end (letterbox → forward → decode/NMS), 640×640,
-fp16 + CUDA graphs, RTX 4080, measured identically for all three.
+Latency: batch 1, 640×640, RTX 4080, median of 5 runs, each configuration in
+its own process. **Every model at its own fastest setting** — fp16 + TF32 +
+`torch.compile(mode="reduce-overhead")` (CUDA graphs) for all three. RT-DETR
+additionally runs 100 queries and 4 decoder layers, measured separately as
+accuracy-neutral (+0.0011 mAP50). Frames are sampled to match the test set's
+52% positive rate; measuring on empty frames leaves NMS nothing to suppress
+and understates the NMS-free advantage (YOLOv5s reads 1.70 ms there vs 3.19 ms
+here).
 
-Because RT-DETR is NMS-free, its latency is nearly independent of how many
-objects are in frame: on the busiest test images latency rises **17%**, versus
-**59%** for YOLOv5l. Its p99 sits at 1.13× its own median; YOLOv5l's is 2.1×.
+Against YOLOv5l, the model of comparable compute (107.7 vs 105.3 GFLOPs),
+RT-DETR is ahead on accuracy, parameters, median and tail. The tail is the
+clearest: **7.21 ms vs 9.95 ms p99**, winning all 5 runs individually, with a
+p99/p50 ratio of 1.21 against 1.64 — the NMS-free property showing up where it
+should. It also returns ~45% more detections per frame (1.99 vs 1.37) at that
+latency.
+
+YOLOv5s is ~1.9× faster on the median for 5 points less mAP50. Its p99
+(6.79 ms) is nonetheless close to RT-DETR's, and its run-to-run spread is
+2.22–4.21 ms against RT-DETR's 5.90–6.39.
 
 > The YOLOv5 rows were scored with upstream `yolov5/val.py`, which rejects 8
 > malformed labels in D-Fire's test set where Ultralytics rejects 4 (4,298 vs
@@ -128,9 +141,16 @@ Three settings were corrected after measurement and matter if you retrain:
   untested and may require trimming decoder layers and input resolution.
 - **Smoke outperforms fire** (0.875 vs 0.797 mAP50). Fire boxes in D-Fire skew
   small and distant.
-- **mAP50-95 is capped around 0.49** and appears annotation-limited rather than
-  model-limited: smoke has no crisp boundary, and an independent published
-  result lands on the same mAP50-95/mAP50 ratio (0.58).
+- **mAP50-95 is capped around 0.49, and the cause is small-object localisation
+  rather than annotation quality.** The obvious hypothesis was that loose
+  labels cap achievable IoU — smoke has no crisp boundary, so annotators
+  disagree. That predicts smoke should lose precision faster than fire as the
+  IoU threshold rises. It does not: fire degrades faster at *every* threshold
+  (at IoU 0.80, fire retains 35.2% of its AP50 against smoke's 52.8%). Box size
+  explains it — fire's median box is 0.53% of image area (47 px at 640, with
+  65% of boxes under 1% of area) against smoke's 14.24% (242 px), and a fixed
+  pixel error costs far more IoU on a small box. Reproduce with
+  `scripts/iou_curve.py`.
 - Four D-Fire test labels have out-of-bounds coordinates and are skipped by the
   evaluator.
 
