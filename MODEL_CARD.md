@@ -41,7 +41,9 @@ quoted from the paper:
 | YOLOv5s | 7.0M | 15.8 | 0.785 | 0.445 | **3.19 ms** | 6.79 ms | **314** |
 
 Latency: batch 1, 640×640, RTX 4080, median of 5 runs, each configuration in
-its own process. **Every model at its own fastest setting** — fp16 + TF32 +
+its own process. FPS is derived from p50 rather than the mean, because
+YOLOv5s's tail (p99/p50 = 2.13) is heavy enough that its mean understates
+typical throughput. **Every model at its own fastest setting** — fp16 + TF32 +
 `torch.compile(mode="reduce-overhead")` (CUDA graphs) for all three. RT-DETR
 additionally runs 100 queries and 4 decoder layers, measured separately as
 accuracy-neutral (+0.0011 mAP50). Frames are sampled to match the test set's

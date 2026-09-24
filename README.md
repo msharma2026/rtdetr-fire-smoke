@@ -61,9 +61,11 @@ weights, re-evaluated here on the same test split rather than quoted:
 just ours. RT-DETR additionally runs 100 queries and 4 decoder layers, which
 is separately measured as accuracy-neutral (+0.0011 mAP50) and has no YOLO
 equivalent. Batch 1, 640×640, RTX 4080; median of 5 runs, each config in its
-own process.
+own process. **FPS is derived from p50, not the mean** — YOLOv5s's tail is
+heavy enough (p99/p50 = 2.13) that its mean understates typical throughput by
+roughly a third.
 
-Two measurement choices that matter, both learned by getting them wrong first:
+Two measurement choices that materially change the numbers:
 
 - **Frames are sampled to match the test set's 52% positive rate.** Taking the
   first 40 files instead gives 0/40 positives, which leaves NMS nothing to
@@ -151,7 +153,7 @@ python scripts/train.py --stage 2 --data joint_r16.yaml \
     --weights runs/stage1_fasdd/weights/best.pt \
     --freeze 0 --bblr 0.3 --lr0 1e-4 --epochs 2
 
-# Stage 2 (sequential, the ablation control) — D-Fire only, ~1.3 h at 20 epochs
+# Stage 2 (sequential, the ablation control) — D-Fire only, ~2.9 h at 20 epochs
 python scripts/train_watchdog.py --stage 2
 ```
 
