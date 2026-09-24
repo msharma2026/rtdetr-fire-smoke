@@ -12,12 +12,12 @@ held-out test set.
 Stage 2 is now **joint** rather than sequential: instead of fine-tuning on
 D-Fire alone, it continues from the FASDD checkpoint on a *pooled* set of both
 datasets with D-Fire oversampled 16×. Fine-tuning on D-Fire alone costs FASDD
-accuracy (0.8038 → 0.7550) — the model trades away what it was pretrained on.
-Training on the pool instead holds FASDD at **0.7901** at the same D-Fire
-accuracy, for about the same cost (2.59 h against 2.95 h). Note the epoch
-counts are not comparable — the pool is 21× larger than D-Fire alone, so its
-2 epochs are 41,720 gradient steps against the sequential recipe's 19,380 over
-20. It is a better model for the same budget, not a cheaper one.
+accuracy (0.8038 → 0.7550) — domain shift. Training on the pool instead holds
+FASDD at **0.7901** at the same D-Fire accuracy, for about the same cost 
+(2.59 h against 2.95 h). Note the epoch counts are not comparable — the pool
+is 21× larger than D-Fire alone, so its 2 epochs are 41,720 gradient steps
+against the sequential recipe's 19,380 over 20. It is a better model for the
+same budget.
 
 The sequential recipe is kept because it is the controlled arm the pretraining
 ablation is measured against.
@@ -33,8 +33,6 @@ D-Fire held-out test set (4,306 images), RTX 4080.
 | **joint pool, D-Fire ×16** | **0.8368** | **0.4866** | **0.7901** | 2.59 h |
 | sequential, D-Fire only | 0.8352 ± 0.0008 | 0.4854 ± 0.0010 | 0.7550 | 2.95 h |
 
-Joint per-class: fire 0.7988 / smoke 0.8749 mAP50 — within noise of the
-sequential arm's 0.797 / 0.875, so the difference is retention, not detection.
 Sequential row is mean ± sd over 3 seeds.
 FASDD pretraining is worth **+0.0386 mAP50** (95% CI [+0.0253, +0.0520]),
 measured on the sequential arm.
